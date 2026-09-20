@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches and virtual environments
+.pytest_cache/
+.venv/
+env/
+venv/
+.env
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Excluded documentation and reference folders
+docs/
+Natwest- Exercise-2/
+Natwest-Exercise-2/
+
+# Data files (raw datasets)
+data/

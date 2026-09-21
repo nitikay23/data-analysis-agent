@@ -168,35 +168,9 @@ class DataLoader:
                 )
 
             # Normalize numeric fields (int / Decimal)
-            raw_units = row.get("units", "")
-            units: Optional[int] = None
-            if raw_units:
-                try:
-                    units = int(raw_units)
-                except ValueError as e:
-                    raise DataValidationError(
-                        f"Row {line_num} (ID {record_id}): Invalid integer value for 'units': '{raw_units}'."
-                    ) from e
-
-            raw_unit_price = row.get("unit_price", "")
-            unit_price: Optional[Decimal] = None
-            if raw_unit_price:
-                try:
-                    unit_price = Decimal(raw_unit_price)
-                except InvalidOperation as e:
-                    raise DataValidationError(
-                        f"Row {line_num} (ID {record_id}): Invalid Decimal value for 'unit_price': '{raw_unit_price}'."
-                    ) from e
-
-            raw_discount = row.get("discount", "")
-            discount: Optional[Decimal] = None
-            if raw_discount:
-                try:
-                    discount = Decimal(raw_discount)
-                except InvalidOperation as e:
-                    raise DataValidationError(
-                        f"Row {line_num} (ID {record_id}): Invalid Decimal value for 'discount': '{raw_discount}'."
-                    ) from e
+            units = self._parse_int(row.get("units", ""), "units", line_num, record_id)
+            unit_price = self._parse_decimal(row.get("unit_price", ""), "unit_price", line_num, record_id)
+            discount = self._parse_decimal(row.get("discount", ""), "discount", line_num, record_id)
 
             transactions.append(
                 Transaction(
@@ -211,6 +185,31 @@ class DataLoader:
             )
 
         return transactions
+
+    @staticmethod
+    def _parse_int(raw_value: str, field_name: str, line_num: int, record_id: str) -> Optional[int]:
+        """Parses optional integer field or raises DataValidationError."""
+        if not raw_value:
+            return None
+        try:
+            return int(raw_value)
+        except ValueError as e:
+            raise DataValidationError(
+                f"Row {line_num} (ID {record_id}): Invalid integer value for '{field_name}': '{raw_value}'."
+            ) from e
+
+    @staticmethod
+    def _parse_decimal(raw_value: str, field_name: str, line_num: int, record_id: str) -> Optional[Decimal]:
+        """Parses optional Decimal field or raises DataValidationError."""
+        if not raw_value:
+            return None
+        try:
+            return Decimal(raw_value)
+        except InvalidOperation as e:
+            raise DataValidationError(
+                f"Row {line_num} (ID {record_id}): Invalid Decimal value for '{field_name}': '{raw_value}'."
+            ) from e
+
 
     def _validate_evaluation_questions(
         self, raw_q_views: List[Tuple[int, Dict[str, str]]]

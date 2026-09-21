@@ -36,6 +36,11 @@ class UnsupportedGroupByError(InvalidRequestError):
     pass
 
 
+class UnsupportedResultOperationError(InvalidRequestError):
+    """Raised when a result_operation is not supported."""
+    pass
+
+
 class InvalidFilterValueError(InvalidRequestError):
     """Raised when a filter value cannot be parsed to the column's target type."""
     pass

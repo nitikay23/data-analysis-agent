@@ -74,7 +74,24 @@ class PresentationFormatter:
             detail = result.error_message or result.explanation or "Invalid analysis request."
             return f"Invalid request: {detail}"
 
-        # Grouped values handling: formats grouped dictionary without analytical modifications
+        # 1. Comparative / Selected group natural language response
+        if result.selected_group is not None:
+            formatted_val = cls.format_number(result.value, effective_metric)
+            group_label = result.group_by or "group"
+            op_label = result.result_operation or "selected"
+            if result.aggregation == "sum":
+                agg_label = "total "
+            elif result.aggregation and result.aggregation != "none":
+                agg_label = f"{result.aggregation} "
+            else:
+                agg_label = ""
+
+            output_str = f"The {group_label} with the {op_label} {agg_label}{effective_metric} is {result.selected_group}, with {formatted_val}."
+            if result.status == "PARTIAL":
+                output_str += f" (Note: {result.excluded_missing_count} records were excluded due to missing values)"
+            return output_str
+
+        # 2. Standard grouped values handling: formats all grouped entries
         if result.grouped_values is not None:
             formatted_groups = []
             for group_key in sorted(result.grouped_values.keys()):
@@ -87,7 +104,7 @@ class PresentationFormatter:
                 output_str += f" (Note: {result.excluded_missing_count} records were excluded due to missing values)"
             return output_str
 
-        # Scalar value handling
+        # 3. Scalar value handling
         formatted_val = cls.format_number(result.value, effective_metric)
         if result.status == "PARTIAL":
             return f"{formatted_val} (Note: {result.excluded_missing_count} records were excluded due to missing values)"

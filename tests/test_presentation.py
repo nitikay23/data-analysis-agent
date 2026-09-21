@@ -61,6 +61,25 @@ class TestPresentationFormatter:
         formatted = PresentationFormatter.format_result(result)
         assert formatted == "APAC: 1500.25, EMEA: 2000.00, US: 3000.50"
 
+    def test_format_result_selected_group_natural_language(self) -> None:
+        """Formats selected_group as deterministic natural-language sentence."""
+        result = AnalysisResult(
+            status="SUCCESS",
+            metric="revenue",
+            aggregation="sum",
+            group_by="region",
+            result_operation="highest",
+            selected_group="DE",
+            value=Decimal("5350.00"),
+            grouped_values={
+                "DE": Decimal("5350.00"),
+                "FR": Decimal("3600.00"),
+                "UK": Decimal("4320.00"),
+            },
+        )
+        formatted = PresentationFormatter.format_result(result)
+        assert formatted == "The region with the highest total revenue is DE, with 5350.00."
+
     def test_format_result_partial_status(self) -> None:
         """Includes note about excluded missing records when status is PARTIAL."""
         result = AnalysisResult(

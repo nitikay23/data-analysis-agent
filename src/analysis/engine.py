@@ -17,6 +17,7 @@ from src.analysis.exceptions import (
     UnsupportedGroupByError,
     UnsupportedMetricError,
     UnsupportedOperatorError,
+    UnsupportedResultOperationError,
 )
 from src.analysis.metrics import (
     METRIC_REGISTRY,
@@ -24,6 +25,10 @@ from src.analysis.metrics import (
     MetricsCalculator,
 )
 from src.models import (
+    ALLOWED_FILTER_OPERATORS,
+    ALLOWED_GROUP_BY_COLUMNS,
+    SUPPORTED_AGGREGATIONS,
+    SUPPORTED_RESULT_OPERATIONS,
     AnalysisRequest,
     AnalysisResult,
     DatasetContext,
@@ -34,7 +39,6 @@ from src.models import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_AGGREGATIONS: Set[str] = {"sum", "count", "mean", "median", "min", "max"}
 ALLOWED_FILTER_COLUMNS: Set[str] = {
     "id",
     "date",
@@ -47,17 +51,6 @@ ALLOWED_FILTER_COLUMNS: Set[str] = {
     "discount_amount",
     "revenue",
 }
-ALLOWED_FILTER_OPERATORS: Set[str] = {
-    "eq",
-    "neq",
-    "gt",
-    "gte",
-    "lt",
-    "lte",
-    "in",
-    "between",
-}
-ALLOWED_GROUP_BY_COLUMNS: Set[str] = {"region", "product"}
 DECIMAL_COLUMNS: Set[str] = {
     "unit_price",
     "discount",
@@ -68,19 +61,16 @@ DECIMAL_COLUMNS: Set[str] = {
 
 
 def _is_valid(val: Any) -> bool:
-    """Returns True if value is not None and not NaN."""
+    """Helper checking whether a value is non-null and not NaN."""
     if val is None:
         return False
-    try:
-        if pd.isna(val):
-            return False
-    except (ValueError, TypeError):
-        pass
+    if isinstance(val, float) and pd.isna(val):
+        return False
     return True
 
 
 class AnalysisEngine:
-    """Performs deterministic dataset queries, arithmetic calculations, and aggregations."""
+    """Core deterministic analysis engine executing validated computations directly on records."""
 
     def __init__(self, dataset: Union[List[Transaction], DatasetContext]) -> None:
         if isinstance(dataset, DatasetContext):
@@ -136,67 +126,40 @@ class AnalysisEngine:
                 df[col] = df[col].astype(object)
         return df
 
-
-
     def execute(self, request: AnalysisRequest) -> AnalysisResult:
-        """Executes a structured analytical request deterministically."""
+        """Validates request, filters dataset, executes aggregation, and returns structured AnalysisResult."""
         logger.info(
-            "Analysis started: metric=%s, aggregation=%s, group_by=%s, filters_count=%d",
+            "Analysis started: metric=%s, aggregation=%s, group_by=%s, result_operation=%s, filters_count=%d",
             request.metric,
             request.aggregation,
             request.group_by,
+            request.result_operation,
             len(request.filters),
         )
 
-        # 1. Structural request validation
+        # 1. Structural and Domain Validation
         self._validate_request(request)
 
-        # 2. Check for unknown dimension values (distinguishing from NO_DATA)
+        # 2. Check for unknown categorical filter dimension values
         unknown_dim_result = self._check_dimension_values(request)
         if unknown_dim_result is not None:
-            logger.info(
-                "Analysis completed with UNKNOWN_DIMENSION_VALUE: %s",
-                unknown_dim_result.error_message,
-            )
+            logger.info("Analysis completed with UNKNOWN_DIMENSION_VALUE: %s", unknown_dim_result.error_message)
             return unknown_dim_result
 
-        # 3. Apply filters and date range
+        # 3. Apply Filter Clauses
         filtered_df, filter_traces = self._apply_filters(request)
-        matched_rows = len(filtered_df)
 
-        # 4. Handle zero matching records
-        if matched_rows == 0:
-            logger.info("Analysis completed with NO_DATA (0 rows matched)")
-            if request.aggregation == "count" or request.metric == "transaction_count":
-                return AnalysisResult(
-                    status="SUCCESS",
-                    metric=request.metric,
-                    aggregation=request.aggregation,
-                    value=0,
-                    grouped_values={} if request.group_by else None,
-                    group_by=request.group_by,
-                    matched_rows=0,
-                    excluded_missing_count=0,
-                    total_matching_records=0,
-                    trace=OperationTrace(
-                        filters_applied=filter_traces,
-                        date_range_applied=self._format_date_range(request),
-                        metric=request.metric,
-                        aggregation=request.aggregation,
-                        group_by=request.group_by,
-                        matched_rows=0,
-                        excluded_rows=0,
-                        calculation_details="0 matching records",
-                    ),
-                    explanation="No records matched the filter criteria.",
-                )
+        # 4. Check for Empty Dataset (NO_DATA)
+        if filtered_df.empty:
+            logger.info("Analysis completed: NO_DATA matching filter criteria")
             return AnalysisResult(
                 status="NO_DATA",
                 metric=request.metric,
                 aggregation=request.aggregation,
-                value=None,
-                grouped_values=None,
                 group_by=request.group_by,
+                result_operation=request.result_operation,
+                value=None,
+                grouped_values={},
                 matched_rows=0,
                 excluded_missing_count=0,
                 total_matching_records=0,
@@ -224,15 +187,16 @@ class AnalysisEngine:
             )
 
         logger.info(
-            "Analysis completed: status=%s, matched_rows=%d, value=%s",
+            "Analysis completed: status=%s, matched_rows=%d, value=%s, selected_group=%s",
             result.status,
             result.matched_rows,
             result.value if not result.grouped_values else result.grouped_values,
+            result.selected_group,
         )
         return result
 
     def _validate_request(self, request: AnalysisRequest) -> None:
-        """Validates metric, aggregation, group_by, filter columns, operators, and date ranges."""
+        """Validates metric, aggregation, group_by, result_operation, filter columns, operators, and date ranges."""
         if not MetricsCalculator.is_supported(request.metric):
             raise UnsupportedMetricError(
                 f"Unsupported metric '{request.metric}'. Allowed metrics: {sorted(SUPPORTED_METRICS)}"
@@ -247,6 +211,14 @@ class AnalysisEngine:
             raise UnsupportedGroupByError(
                 f"Unsupported group_by column '{request.group_by}'. Allowed: {sorted(ALLOWED_GROUP_BY_COLUMNS)}"
             )
+
+        if request.result_operation is not None:
+            if request.result_operation not in SUPPORTED_RESULT_OPERATIONS:
+                raise UnsupportedResultOperationError(
+                    f"Unsupported result_operation '{request.result_operation}'. Allowed: {sorted(SUPPORTED_RESULT_OPERATIONS)}"
+                )
+            if request.group_by is None:
+                raise InvalidRequestError("result_operation requires group_by to be specified.")
 
         if request.start_date and request.end_date and request.start_date > request.end_date:
             raise InvalidDateRangeError(
@@ -275,6 +247,7 @@ class AnalysisEngine:
                             metric=request.metric,
                             aggregation=request.aggregation,
                             group_by=request.group_by,
+                            result_operation=request.result_operation,
                             value=None,
                             explanation=f"Unknown region '{val}'. Known regions: {sorted(self._known_regions)}",
                             error_message=f"Unknown region '{val}'",
@@ -289,6 +262,7 @@ class AnalysisEngine:
                             metric=request.metric,
                             aggregation=request.aggregation,
                             group_by=request.group_by,
+                            result_operation=request.result_operation,
                             value=None,
                             explanation=f"Unknown product '{val}'. Known products: {sorted(self._known_products)}",
                             error_message=f"Unknown product '{val}'",
@@ -319,44 +293,38 @@ class AnalysisEngine:
         return self._df[mask].copy(), filter_traces
 
     def _evaluate_filter_clause(self, f: FilterClause) -> Tuple[pd.Series, str]:
-        """Evaluates a single filter clause returning a boolean Series mask."""
+        """Evaluates a single FilterClause against the internal DataFrame."""
         series = self._df[f.field]
-        op = f.operator
         val = f.value
+        op = f.operator
 
-        # Normalize comparison values for categorical string fields (case-insensitive)
-        if f.field in {"region", "product", "id"}:
+        # Normalize categorical strings (case-insensitive)
+        if f.field in ("region", "product", "id"):
+            series_lower = series.apply(lambda x: str(x).strip().lower() if x is not None else "")
             if op == "eq":
-                target = str(val).strip().lower()
-                mask = series.astype(str).str.strip().str.lower() == target
-                return mask, f"{f.field} == '{val}'"
+                target_lower = str(val).strip().lower()
+                return series_lower == target_lower, f"{f.field} == '{val}'"
             elif op == "neq":
-                target = str(val).strip().lower()
-                mask = series.astype(str).str.strip().str.lower() != target
-                return mask, f"{f.field} != '{val}'"
+                target_lower = str(val).strip().lower()
+                return (series_lower != target_lower) & series.notna(), f"{f.field} != '{val}'"
             elif op == "in":
-                targets = {str(v).strip().lower() for v in val}
-                mask = series.astype(str).str.strip().str.lower().isin(targets)
-                return mask, f"{f.field} in {val}"
+                target_list_lower = [str(v).strip().lower() for v in (val if isinstance(val, (list, tuple, set)) else [val])]
+                return series_lower.isin(target_list_lower), f"{f.field} in {val}"
             else:
-                raise UnsupportedOperatorError(f"Operator '{op}' is not supported for text column '{f.field}'")
+                raise UnsupportedOperatorError(f"Operator '{op}' not supported for categorical column '{f.field}'")
 
-        # Normalize comparison values for Decimal columns
+        # Normalize numeric Decimals
         if f.field in DECIMAL_COLUMNS:
             try:
                 if op == "between":
-                    if not isinstance(val, (list, tuple)) or len(val) != 2:
-                        raise InvalidFilterValueError(f"'between' operator requires a 2-element sequence, got {val}")
-                    target_low = Decimal(str(val[0]))
-                    target_high = Decimal(str(val[1]))
-                    mask = series.apply(
-                        lambda x: (x is not None and target_low <= x <= target_high)
-                    )
-                    return mask, f"{target_low} <= {f.field} <= {target_high}"
+                    d1 = Decimal(str(val[0]))
+                    d2 = Decimal(str(val[1]))
+                    mask = series.apply(lambda x: d1 <= x <= d2 if x is not None else False)
+                    return mask, f"{d1} <= {f.field} <= {d2}"
                 elif op == "in":
-                    targets = {Decimal(str(v)) for v in val}
-                    mask = series.apply(lambda x: x in targets if x is not None else False)
-                    return mask, f"{f.field} in {[str(t) for t in targets]}"
+                    dec_list = [Decimal(str(v)) for v in val]
+                    mask = series.apply(lambda x: x in dec_list if x is not None else False)
+                    return mask, f"{f.field} in {dec_list}"
                 else:
                     target = Decimal(str(val))
                     if op == "eq":
@@ -372,27 +340,23 @@ class AnalysisEngine:
                     elif op == "lte":
                         mask = series.apply(lambda x: x <= target if x is not None else False)
                     else:
-                        raise UnsupportedOperatorError(f"Operator '{op}' not supported for numeric column '{f.field}'")
+                        raise UnsupportedOperatorError(f"Operator '{op}' not supported for column '{f.field}'")
                     return mask, f"{f.field} {op} {target}"
             except (InvalidOperation, TypeError, ValueError) as e:
-                raise InvalidFilterValueError(
-                    f"Invalid Decimal filter value '{val}' for column '{f.field}': {e}"
-                ) from e
+                raise InvalidFilterValueError(f"Invalid decimal filter value '{val}' for '{f.field}': {e}") from e
 
         # Normalize units (integer)
         if f.field == "units":
             try:
                 if op == "between":
-                    target_low = int(val[0])
-                    target_high = int(val[1])
-                    mask = series.apply(
-                        lambda x: (x is not None and target_low <= x <= target_high)
-                    )
-                    return mask, f"{target_low} <= units <= {target_high}"
+                    i1 = int(val[0])
+                    i2 = int(val[1])
+                    mask = series.apply(lambda x: i1 <= x <= i2 if x is not None else False)
+                    return mask, f"{i1} <= units <= {i2}"
                 elif op == "in":
-                    targets = {int(v) for v in val}
-                    mask = series.apply(lambda x: x in targets if x is not None else False)
-                    return mask, f"units in {targets}"
+                    int_list = [int(v) for v in val]
+                    mask = series.apply(lambda x: x in int_list if x is not None else False)
+                    return mask, f"units in {int_list}"
                 else:
                     target = int(val)
                     if op == "eq":
@@ -486,27 +450,21 @@ class AnalysisEngine:
                 matched_rows=matched_rows,
                 excluded_missing_count=excluded_missing,
                 total_matching_records=matched_rows,
-                trace=OperationTrace(
-                    filters_applied=filter_traces,
-                    date_range_applied=self._format_date_range(request),
-                    metric=request.metric,
-                    aggregation=request.aggregation,
-                    matched_rows=matched_rows,
-                    excluded_rows=excluded_missing,
-                    calculation_details="All matching records contained missing values for metric.",
-                ),
-                explanation=f"All {matched_rows} matching records have missing values for metric '{request.metric}'.",
+                explanation="All matching records contained null values for this metric.",
             )
 
         metric_def = MetricsCalculator.get_definition(request.metric)
-        computed_val = self._compute_aggregate(valid_values, request.aggregation, metric_def.is_decimal)
+        calculated_value = self._compute_aggregate(
+            valid_values, request.aggregation, metric_def.is_decimal
+        )
+
         status = "PARTIAL" if excluded_missing > 0 else "SUCCESS"
 
         return AnalysisResult(
             status=status,
             metric=request.metric,
             aggregation=request.aggregation,
-            value=computed_val,
+            value=calculated_value,
             matched_rows=matched_rows,
             excluded_missing_count=excluded_missing,
             total_matching_records=matched_rows,
@@ -550,6 +508,20 @@ class AnalysisEngine:
                         valid_vals, request.aggregation, metric_def.is_decimal
                     )
 
+        # Execute result_operation (highest/lowest) selection if requested
+        selected_group: Optional[str] = None
+        selected_value: Any = None
+
+        if request.result_operation:
+            valid_groups = {k: v for k, v in grouped_values.items() if v is not None}
+            if valid_groups:
+                sorted_keys = sorted(valid_groups.keys())
+                if request.result_operation == "highest":
+                    selected_group = max(sorted_keys, key=lambda k: valid_groups[k])
+                    selected_value = valid_groups[selected_group]
+                elif request.result_operation == "lowest":
+                    selected_group = min(sorted_keys, key=lambda k: valid_groups[k])
+                    selected_value = valid_groups[selected_group]
 
         status = "PARTIAL" if total_excluded_missing > 0 else "SUCCESS"
 
@@ -557,8 +529,11 @@ class AnalysisEngine:
             status=status,
             metric=request.metric,
             aggregation=request.aggregation,
+            value=selected_value,
             grouped_values=grouped_values,
             group_by=group_col,
+            result_operation=request.result_operation,
+            selected_group=selected_group,
             matched_rows=matched_rows,
             excluded_missing_count=total_excluded_missing,
             total_matching_records=matched_rows,

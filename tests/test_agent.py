@@ -68,12 +68,10 @@ class TestAgentOrchestratorEvaluationBenchmark:
         assert response == "7.70"
 
     def test_q003_highest_revenue_region(self, orchestrator: AgentOrchestrator) -> None:
-        """Q003: Region grouped revenue breakdown without PresentationFormatter performing hidden max() reductions."""
-        # DE: 1000+1800+2550=5350, FR: 1200+1400+1000=3600, UK: 4320
+        """Q003: Deterministic natural-language response for comparative superlative query."""
+        # DE: 5350.00, FR: 3600.00, UK: 4320.00 -> Highest is DE with 5350.00
         response = orchestrator.process_query("Which region has the highest total revenue?")
-        assert "DE: 5350.00" in response
-        assert "FR: 3600.00" in response
-        assert "UK: 4320.00" in response
+        assert response == "The region with the highest total revenue is DE, with 5350.00."
 
     def test_q004_beta_transaction_count(self, orchestrator: AgentOrchestrator) -> None:
         """Q004: Count of Beta transactions."""
@@ -124,6 +122,26 @@ class TestAgentOrchestratorEvaluationBenchmark:
         response = orchestrator.process_query("How much money did we make in Mars?")
         assert "Unknown dimension value" in response
         assert "Mars" in response
+
+    def test_comparative_lowest_query(self, orchestrator: AgentOrchestrator) -> None:
+        """Comparative query for lowest region revenue."""
+        mock = orchestrator.llm_client
+        if isinstance(mock, MockLLMClient):
+            mock.register_mapping(
+                "which region has the lowest total revenue?",
+                {
+                    "tool": "run_analysis",
+                    "arguments": {
+                        "metric": "revenue",
+                        "aggregation": "sum",
+                        "group_by": "region",
+                        "result_operation": "lowest",
+                    },
+                },
+            )
+        # FR has lowest total revenue: 3600.00
+        res = orchestrator.process_query("Which region has the lowest total revenue?")
+        assert res == "The region with the lowest total revenue is FR, with 3600.00."
 
 
 class TestAgentOrchestratorEdgeCases:

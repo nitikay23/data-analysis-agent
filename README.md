@@ -48,7 +48,9 @@ project/
 │   ├── agent/
 │   │   └── orchestrator.py
 │   ├── llm/
-│   │   └── client.py
+│   │   ├── client.py
+│   │   ├── prompts.py
+│   │   └── exceptions.py
 │   └── presentation/
 │       └── formatter.py
 ├── tests/
@@ -60,12 +62,21 @@ project/
 └── .env.example
 ```
 
-## Setup
+## Setup & Running
 
 ```bash
 # Install dependencies
 pip install -e .
 
-# Run test suite
+# Run full test suite (106 unit & integration tests)
 pytest
+
+# Run a single query using local deterministic mock LLM
+python src/main.py "What is the total revenue for UK transactions?" --mock
+
+# Run the complete Q001-Q010 evaluation benchmark
+python src/main.py --eval --mock
+
+# Run against a local Ollama instance (default model: llama3.2 at http://localhost:11434)
+python src/main.py "What is the total revenue for UK transactions?"
 ```

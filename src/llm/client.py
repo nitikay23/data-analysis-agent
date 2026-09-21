@@ -129,6 +129,7 @@ class MockLLMClient(LLMClient):
                 "metric": "revenue",
                 "aggregation": "sum",
                 "group_by": "region",
+                "result_operation": "highest",
             },
         },
         # Q004: "How many Beta transactions are there?"

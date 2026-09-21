@@ -1,9 +1,24 @@
-"""Domain models and data contracts."""
+"""Domain models, request/result contracts, and authoritative analytical vocabulary."""
 
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
+
+# Authoritative domain vocabulary definitions
+SUPPORTED_RESULT_OPERATIONS: Set[str] = {"highest", "lowest"}
+SUPPORTED_AGGREGATIONS: Set[str] = {"sum", "count", "mean", "median", "min", "max"}
+ALLOWED_GROUP_BY_COLUMNS: Set[str] = {"region", "product"}
+ALLOWED_FILTER_OPERATORS: Set[str] = {
+    "eq",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "in",
+    "between",
+}
 
 
 @dataclass(frozen=True)
@@ -54,6 +69,7 @@ class AnalysisRequest:
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     group_by: Optional[str] = None
+    result_operation: Optional[str] = None  # "highest" | "lowest"
 
 
 @dataclass
@@ -78,6 +94,8 @@ class AnalysisResult:
     value: Any = None
     grouped_values: Optional[Dict[str, Any]] = None
     group_by: Optional[str] = None
+    result_operation: Optional[str] = None
+    selected_group: Optional[str] = None
     matched_rows: int = 0
     excluded_missing_count: int = 0
     total_matching_records: int = 0

@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Dict, Optional, Set, Tuple
 
+from src.models import SUPPORTED_RESULT_OPERATIONS
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,6 +65,16 @@ class GuardrailValidator:
             group_by = arguments.get("group_by")
             if group_by is not None and not isinstance(group_by, str):
                 return False, "Argument 'group_by' must be a string or None."
+
+            result_operation = arguments.get("result_operation")
+            if result_operation is not None:
+                if not isinstance(result_operation, str) or result_operation not in SUPPORTED_RESULT_OPERATIONS:
+                    return (
+                        False,
+                        f"Argument 'result_operation' must be one of {sorted(SUPPORTED_RESULT_OPERATIONS)}, got '{result_operation}'.",
+                    )
+                if not group_by:
+                    return False, "Argument 'result_operation' requires 'group_by' to be specified."
 
         logger.info("Guardrail successfully validated tool request for '%s'", tool_name)
         return True, ""

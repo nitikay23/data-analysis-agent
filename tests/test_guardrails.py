@@ -94,3 +94,41 @@ def test_custom_allowed_tools_configuration():
     custom_validator = GuardrailValidator(allowed_tools={"custom_tool"})
     assert custom_validator.validate_tool_request("custom_tool", {}) == (True, "")
     assert custom_validator.validate_tool_request("run_analysis", {})[0] is False
+
+
+def test_valid_result_operation_accepted(validator: GuardrailValidator):
+    """Test valid result_operation='highest' with group_by is accepted."""
+    args = {
+        "metric": "revenue",
+        "aggregation": "sum",
+        "group_by": "region",
+        "result_operation": "highest",
+    }
+    is_valid, reason = validator.validate_tool_request("run_analysis", args)
+    assert is_valid is True
+    assert reason == ""
+
+
+def test_invalid_result_operation_rejected(validator: GuardrailValidator):
+    """Test unsupported result_operation is rejected."""
+    args = {
+        "metric": "revenue",
+        "aggregation": "sum",
+        "group_by": "region",
+        "result_operation": "top_3",
+    }
+    is_valid, reason = validator.validate_tool_request("run_analysis", args)
+    assert is_valid is False
+    assert "result_operation" in reason
+
+
+def test_result_operation_without_group_by_rejected(validator: GuardrailValidator):
+    """Test result_operation without group_by is rejected by guardrails."""
+    args = {
+        "metric": "revenue",
+        "aggregation": "sum",
+        "result_operation": "highest",
+    }
+    is_valid, reason = validator.validate_tool_request("run_analysis", args)
+    assert is_valid is False
+    assert "requires 'group_by'" in reason

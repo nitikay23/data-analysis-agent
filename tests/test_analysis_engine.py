@@ -488,3 +488,93 @@ def test_34_dynamic_metric_registry_extensibility(sample_transactions: list[Tran
         METRIC_REGISTRY.pop("net_unit_price", None)
         SUPPORTED_METRICS.discard("net_unit_price")
 
+
+def test_35_result_operation_highest(engine: AnalysisEngine):
+    """Test 35: Verify result_operation='highest' selects region with maximum revenue."""
+    req = AnalysisRequest(
+        metric="revenue",
+        aggregation="sum",
+        group_by="region",
+        result_operation="highest",
+    )
+    res = engine.execute(req)
+    assert res.status == "SUCCESS"
+    assert res.selected_group == "DE"
+    assert res.value == Decimal("5350")
+    assert res.result_operation == "highest"
+    assert res.grouped_values == {"DE": Decimal("5350"), "FR": Decimal("3600"), "UK": Decimal("4320")}
+
+
+def test_36_result_operation_lowest(engine: AnalysisEngine):
+    """Test 36: Verify result_operation='lowest' selects region with minimum revenue."""
+    req = AnalysisRequest(
+        metric="revenue",
+        aggregation="sum",
+        group_by="region",
+        result_operation="lowest",
+    )
+    res = engine.execute(req)
+    assert res.status == "SUCCESS"
+    assert res.selected_group == "FR"
+    assert res.value == Decimal("3600")
+    assert res.result_operation == "lowest"
+
+
+def test_37_result_operation_deterministic_tie_breaking(sample_transactions: list[Transaction]):
+    """Test 37: Deterministic tie-breaking selects alphabetical first key when values tie."""
+    # Create two transactions with identical revenue for DE and FR
+    tied_transactions = [
+        Transaction(id="T1", date=date(2026, 1, 1), region="FR", product="Alpha", units=10, unit_price=Decimal("100"), discount=Decimal("0.00")),
+        Transaction(id="T2", date=date(2026, 1, 2), region="DE", product="Alpha", units=10, unit_price=Decimal("100"), discount=Decimal("0.00")),
+    ]
+    tied_engine = AnalysisEngine(tied_transactions)
+    req = AnalysisRequest(
+        metric="revenue",
+        aggregation="sum",
+        group_by="region",
+        result_operation="highest",
+    )
+    res = tied_engine.execute(req)
+    assert res.selected_group == "DE"  # DE precedes FR alphabetically
+    assert res.value == Decimal("1000")
+
+
+def test_38_result_operation_without_group_by_raises(engine: AnalysisEngine):
+    """Test 38: result_operation without group_by raises InvalidRequestError."""
+    from src.analysis.exceptions import InvalidRequestError
+    req = AnalysisRequest(
+        metric="revenue",
+        aggregation="sum",
+        result_operation="highest",
+    )
+    with pytest.raises(InvalidRequestError, match="result_operation requires group_by"):
+        engine.execute(req)
+
+
+def test_39_unsupported_result_operation_raises(engine: AnalysisEngine):
+    """Test 39: Unsupported result_operation raises UnsupportedResultOperationError."""
+    from src.analysis.exceptions import UnsupportedResultOperationError
+    req = AnalysisRequest(
+        metric="revenue",
+        aggregation="sum",
+        group_by="region",
+        result_operation="top_3",
+    )
+    with pytest.raises(UnsupportedResultOperationError, match="Unsupported result_operation"):
+        engine.execute(req)
+
+
+def test_40_result_operation_no_data(engine: AnalysisEngine):
+    """Test 40: result_operation on filter with 0 matching rows returns NO_DATA."""
+    req = AnalysisRequest(
+        metric="revenue",
+        aggregation="sum",
+        group_by="region",
+        result_operation="highest",
+        filters=[FilterClause(field="units", operator="gt", value=9999)],
+    )
+    res = engine.execute(req)
+    assert res.status == "NO_DATA"
+    assert res.selected_group is None
+    assert res.value is None
+

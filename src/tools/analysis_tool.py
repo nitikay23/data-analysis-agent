@@ -17,7 +17,7 @@ class AnalysisTool:
     name: str = "run_analysis"
     description: str = (
         "Executes deterministic data analysis over validated transaction records "
-        "supporting filtering, date ranges, metrics, aggregations, and grouping."
+        "supporting filtering, date ranges, metrics, aggregations, grouping, and comparative selection."
     )
 
     def __init__(self, engine: AnalysisEngine) -> None:
@@ -146,7 +146,17 @@ class AnalysisTool:
                 error_message=f"group_by must be a string, got {type(group_by).__name__}",
             )
 
-        # 4. Construct request and delegate to AnalysisEngine
+        # 4. Parse optional result_operation
+        result_operation = kwargs.get("result_operation")
+        if result_operation is not None and not isinstance(result_operation, str):
+            return AnalysisResult(
+                status="INVALID_REQUEST",
+                metric=metric,
+                aggregation=aggregation,
+                error_message=f"result_operation must be a string or None, got {type(result_operation).__name__}",
+            )
+
+        # 5. Construct request and delegate to AnalysisEngine
         request = AnalysisRequest(
             metric=metric,
             aggregation=aggregation,
@@ -154,6 +164,7 @@ class AnalysisTool:
             start_date=start_date_obj,
             end_date=end_date_obj,
             group_by=group_by,
+            result_operation=result_operation,
         )
 
         try:
@@ -165,6 +176,7 @@ class AnalysisTool:
                 metric=metric,
                 aggregation=aggregation,
                 group_by=group_by,
+                result_operation=result_operation,
                 error_message=str(e),
                 explanation=str(e),
             )

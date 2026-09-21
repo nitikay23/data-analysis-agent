@@ -25,6 +25,19 @@ class EvaluationQuestion:
     question: str
 
 
+@dataclass(frozen=True)
+class DatasetContext:
+    """Immutable container holding validated transactions and evaluation questions."""
+    transactions: List[Transaction]
+    evaluation_questions: List[EvaluationQuestion]
+
+    def __iter__(self):
+        """Allows unpacking as (transactions, evaluation_questions)."""
+        yield self.transactions
+        yield self.evaluation_questions
+
+
+
 @dataclass
 class FilterClause:
     """Represents a filtering condition applied to dataset fields."""

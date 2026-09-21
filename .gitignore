@@ -2,22 +2,32 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
-# Caches and virtual environments
+# Caches and runtime artifacts
 .pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.pyright/
+
+# Virtual environments
 .venv/
-env/
 venv/
+env/
+ENV/
+
+# Environment files
 .env
 
-# OS specific files
+# Operating System files
 .DS_Store
 Thumbs.db
 
-# Excluded documentation and reference folders
-docs/
-Natwest- Exercise-2/
-Natwest-Exercise-2/
+# Excluded documentation and reference folders (root only)
+/docs/
+/Natwest- Exercise-2/
+/Natwest-Exercise-2/
 
-# Data files (raw datasets)
-data/
+# Data files (root raw dataset directory)
+/data/

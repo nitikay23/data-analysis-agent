@@ -7,7 +7,11 @@ from src.analysis.engine import AnalysisEngine
 from src.analysis.metrics import MetricsCalculator
 from src.config import config
 from src.data.loader import DataLoader
-from src.data.schema import DatasetSchema
+from src.data.schema import (
+    EvaluationQuestionSchema,
+    RawCSVSchema,
+    TransactionSchema,
+)
 from src.guardrails.validator import GuardrailValidator
 from src.llm.client import LLMClient
 from src.models import AnalysisRequest, AnalysisResult, FilterClause, Transaction
@@ -22,11 +26,12 @@ def test_config_defaults():
 
 
 def test_schema_constants():
-    assert "revenue" in DatasetSchema.METRICS
-    assert "UK" in DatasetSchema.TRUSTED_REGIONS
-    assert "Alpha" in DatasetSchema.TRUSTED_PRODUCTS
-    assert "sum" in DatasetSchema.AGGREGATIONS
-    assert "eq" in DatasetSchema.FILTER_OPERATORS
+    assert "question" in RawCSVSchema.REQUIRED_COLUMNS
+    assert "id" in RawCSVSchema.REQUIRED_COLUMNS
+    assert "units" in TransactionSchema.COLUMNS
+    assert "question" not in TransactionSchema.COLUMNS
+    assert "question" in EvaluationQuestionSchema.COLUMNS
+
 
 
 def test_registry():

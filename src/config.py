@@ -18,6 +18,13 @@ class AppConfig:
     llm_model: str = os.getenv("LLM_MODEL", "llama3.2")
     llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.0"))
 
+    def get_resolved_data_path(self) -> Path:
+        """Returns the absolute resolved path to the dataset."""
+        if self.data_path.is_absolute():
+            return self.data_path
+        return (self.base_dir / self.data_path).resolve()
+
 
 # Default configuration instance
 config = AppConfig()
+

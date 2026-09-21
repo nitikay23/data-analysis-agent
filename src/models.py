@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,6 @@ class DatasetContext:
         yield self.evaluation_questions
 
 
-
 @dataclass
 class FilterClause:
     """Represents a filtering condition applied to dataset fields."""
@@ -52,16 +51,36 @@ class AnalysisRequest:
     metric: str
     aggregation: str
     filters: List[FilterClause] = field(default_factory=list)
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
     group_by: Optional[str] = None
+
+
+@dataclass
+class OperationTrace:
+    """Deterministic operation trace describing query resolution and execution details."""
+    filters_applied: List[str] = field(default_factory=list)
+    date_range_applied: Optional[str] = None
+    metric: str = ""
+    aggregation: str = ""
+    group_by: Optional[str] = None
+    matched_rows: int = 0
+    excluded_rows: int = 0
+    calculation_details: str = ""
 
 
 @dataclass
 class AnalysisResult:
     """Result of deterministic analysis computation."""
-    status: str  # SUCCESS, NO_DATA, ERROR
+    status: str  # SUCCESS, PARTIAL, NO_DATA, UNKNOWN_DIMENSION_VALUE, INVALID_REQUEST
+    metric: Optional[str] = None
+    aggregation: Optional[str] = None
     value: Any = None
-    grouped_values: Optional[dict] = None
+    grouped_values: Optional[Dict[str, Any]] = None
+    group_by: Optional[str] = None
+    matched_rows: int = 0
     excluded_missing_count: int = 0
     total_matching_records: int = 0
+    trace: Optional[OperationTrace] = None
     explanation: str = ""
     error_message: Optional[str] = None

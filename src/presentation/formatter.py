@@ -12,7 +12,6 @@ class PresentationFormatter:
     @staticmethod
     def format_number(val: Union[int, float, Decimal], metric_name: str) -> str:
         """Formats numbers: integers without decimals, continuous with 2 decimal places, percentages with %."""
-        # Full presentation rules in Phase 3/5
         return str(val)
 
     @staticmethod

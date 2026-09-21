@@ -1,4 +1,4 @@
-"""Guardrails validation package."""
+"""Guardrails package exporting GuardrailValidator."""
 
 from src.guardrails.validator import GuardrailValidator
 
